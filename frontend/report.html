@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report a problem — SUST FixIt</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar"><div id="nav-slot"></div></header>
+
+<div class="center-page">
+  <div class="wrap">
+    <h1 class="page-title">Report a problem</h1>
+    <div class="panel wide">
+      <div id="alert-slot"></div>
+      <div id="similar-slot"></div>
+
+      <form id="report-form">
+        <div class="field">
+          <label for="title">Title</label>
+          <input type="text" id="title" required minlength="5" maxlength="120" placeholder="e.g. Broken fan in Software Lab 2">
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="building">Building</label>
+            <select id="building" required><option value="">Select…</option></select>
+          </div>
+          <div class="field">
+            <label for="category">Category</label>
+            <select id="category" required><option value="">Select…</option></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="location">Exact location</label>
+          <input type="text" id="location" required minlength="2" maxlength="120" placeholder="e.g. Lab 301, 3rd floor">
+        </div>
+
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" required minlength="10" maxlength="1500" placeholder="What's wrong, and how does it affect students?"></textarea>
+        </div>
+
+        <div class="field">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="margin:0;">Photo <span class="hint" style="display:inline; font-weight:400;">(optional)</span></label>
+            <button type="button" class="btn btn-ghost btn-sm hidden" id="remove-photo-btn" style="color:var(--coral-deep); font-size:0.8rem; padding:2px 8px;">✕ Remove photo</button>
+          </div>
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="image" accept="image/png,image/jpeg,image/gif,image/webp">
+            <img id="preview" class="hidden">
+            <div id="dz-text"><div class="cta">Click to choose a photo</div><div class="hint">JPG, PNG, GIF or WebP, up to 5 MB — no wifi or no camera? Skip it and add one later.</div></div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" id="submit-btn">Submit report</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+requireLogin();
+renderNav('report.html');
+
+let metaData = null;
+let similarTimer = null;
+
+(async function initMeta(){
+  metaData = await API.get('/api/meta');
+  const bSel = document.getElementById('building');
+  metaData.buildings.forEach(b => bSel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`));
+  const cSel = document.getElementById('category');
+  metaData.categories.forEach(c => cSel.insertAdjacentHTML('beforeend', `<option value="${c}">${categoryMeta(c).icon} ${c}</option>`));
+})();
+
+// ---- photo preview & remove ----
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('image');
+const preview = document.getElementById('preview');
+const dzText = document.getElementById('dz-text');
+const removeBtn = document.getElementById('remove-photo-btn');
+
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  preview.src = URL.createObjectURL(file);
+  preview.classList.remove('hidden');
+  dzText.querySelector('.cta').textContent = file.name;
+  dropzone.classList.add('has-file');
+  removeBtn.classList.remove('hidden');
+});
+
+removeBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  fileInput.value = '';
+  preview.src = '';
+  preview.classList.add('hidden');
+  dzText.querySelector('.cta').textContent = 'Click to choose a photo';
+  dropzone.classList.remove('has-file');
+  removeBtn.classList.add('hidden');
+});
+
+// ---- live "similar report" check: simple title+building+location matching ----
+async function checkSimilar(){
+  const title = document.getElementById('title').value.trim();
+  const building = document.getElementById('building').value;
+  const category = document.getElementById('category').value;
+  const location = document.getElementById('location').value.trim();
+  const slot = document.getElementById('similar-slot');
+  if (!building || title.length < 5) { slot.innerHTML = ''; return; }
+  try {
+    const params = new URLSearchParams({ title, building, category, location });
+    const { reports } = await API.get('/api/reports/similar?' + params.toString());
+    if (!reports.length) { slot.innerHTML = ''; return; }
+    slot.innerHTML = `
+      <div class="similar-box">
+        <strong>This may already be reported.</strong> Upvoting an existing report gets it fixed faster than a new one.
+        ${reports.map(r => `
+          <div class="row">
+            <span>${escapeHtml(r.title)} — ${r.upvote_count} upvotes</span>
+            <a class="btn btn-sm btn-ghost" href="feed.html?open=${r.id}" target="_blank" rel="noopener">View & upvote →</a>
+          </div>`).join('')}
+      </div>`;
+  } catch (e) { /* non-critical */ }
+}
+['title','building','category','location'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    clearTimeout(similarTimer);
+    similarTimer = setTimeout(checkSimilar, 500);
+  });
+  document.getElementById(id).addEventListener('change', () => {
+    clearTimeout(similarTimer);
+    similarTimer = setTimeout(checkSimilar, 200);
+  });
+});
+
+// ---- submit ----
+document.getElementById('report-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  const alertSlot = document.getElementById('alert-slot');
+  alertSlot.innerHTML = '';
+  const fd = new FormData();
+  fd.set('title', document.getElementById('title').value.trim());
+  fd.set('description', document.getElementById('description').value.trim());
+  fd.set('category', document.getElementById('category').value);
+  fd.set('building', document.getElementById('building').value);
+  fd.set('location', document.getElementById('location').value.trim());
+  if (fileInput.files[0]) fd.set('image', fileInput.files[0]); // photo is optional
+
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const { report } = await API.postForm('/api/reports', fd);
+    window.location.href = 'dashboard.html?submitted=' + report.id;
+  } catch (err) {
+    alertSlot.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    btn.disabled = false; btn.textContent = 'Submit report';
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feed — SUST FixIt</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar"><div id="nav-slot"></div></header>
+
+<div class="wrap" style="padding-top:32px">
+  <div class="section-head">
+    <h2>Campus Incident Intelligence Feed</h2>
+  </div>
+
+  <!-- Interactive Campus Map & Hotspot Selector -->
+  <div class="campus-map-box">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <div>
+        <h3 style="margin:0; font-size:1.05rem; color:var(--teal-deep);">🗺️ SUST Campus Hotspots & Heatmap</h3>
+        <p style="margin:2px 0 0; font-size:0.82rem; color:var(--muted);">Click any campus facility to filter its active incident queue</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="clear-map-btn" style="font-size:0.8rem;">Show all campus</button>
+    </div>
+    <div class="campus-zones" id="campus-zones"></div>
+  </div>
+
+  <div class="cat-pills" id="cat-pills">
+    <span class="cat-pill active" data-category="">All categories</span>
+  </div>
+
+  <div class="filters">
+    <select id="f-sort">
+      <option value="priority">🔥 Highest Priority</option>
+      <option value="upvotes">▲ Most Upvoted</option>
+      <option value="new">🕒 Newest</option>
+    </select>
+    <select id="f-status">
+      <option value="">All statuses</option>
+      <option value="reported">Reported</option>
+      <option value="verified">Verified</option>
+      <option value="in_progress">In progress</option>
+      <option value="resolved">Resolved</option>
+    </select>
+    <select id="f-building"><option value="">All buildings</option></select>
+    <input type="text" id="f-q" placeholder="Search title, asset tag, or room…">
+    <div class="spacer"></div>
+    <a href="report.html" class="btn btn-primary btn-sm">+ Report a problem</a>
+  </div>
+
+  <div class="report-grid" id="grid"></div>
+
+  <div style="text-align:center; margin:28px 0">
+    <button class="btn btn-ghost hidden" id="load-more">Load more issues</button>
+  </div>
+</div>
+
+<footer class="site"><div class="wrap">SUST FixIt — small reports, real fixes, together.</div></footer>
+
+<script src="js/api.js"></script>
+<script src="js/feed-card.js"></script>
+<script>
+renderNav('feed.html');
+
+const PAGE_SIZE = 12;
+let offset = 0;
+let loading = false;
+let activeCategory = '';
+
+function currentParams(){
+  const p = new URLSearchParams();
+  p.set('sort', document.getElementById('f-sort').value);
+  const status = document.getElementById('f-status').value;
+  const building = document.getElementById('f-building').value;
+  const q = document.getElementById('f-q').value.trim();
+  if (status) p.set('status', status);
+  if (activeCategory) p.set('category', activeCategory);
+  if (building) p.set('building', building);
+  if (q) p.set('q', q);
+  p.set('limit', PAGE_SIZE);
+  return p;
+}
+
+async function loadPage(reset){
+  if (loading) return;
+  loading = true;
+  const grid = document.getElementById('grid');
+  const loadMoreBtn = document.getElementById('load-more');
+  if (reset) {
+    offset = 0;
+    grid.innerHTML = renderSkeletons(6);
+  }
+  const params = currentParams();
+  params.set('offset', offset);
+  try {
+    const { reports, total } = await API.get('/api/reports?' + params.toString());
+    if (reset) grid.innerHTML = '';
+    if (offset === 0 && reports.length === 0) {
+      grid.innerHTML = '<div class="empty">No incidents match these active filters.</div>';
+    } else {
+      const html = reports.map(renderReportCard).join('');
+      grid.insertAdjacentHTML('beforeend', html);
+      attachFeedHandlers(grid);
+    }
+    offset += reports.length;
+    loadMoreBtn.classList.toggle('hidden', offset >= total || reports.length === 0);
+  } catch (e) {
+    grid.innerHTML = `<div class="empty">Could not load the feed: ${escapeHtml(e.message)}</div>`;
+  } finally {
+    loading = false;
+  }
+}
+
+function setActiveCategory(cat){
+  activeCategory = cat;
+  document.querySelectorAll('.cat-pill').forEach(p =>
+    p.classList.toggle('active', p.dataset.category === cat));
+  loadPage(true);
+}
+
+function filterByBuilding(bld){
+  document.getElementById('f-building').value = bld;
+  document.querySelectorAll('.zone-pill').forEach(z => {
+    z.classList.toggle('active', z.dataset.building === bld);
+  });
+  loadPage(true);
+}
+
+(async function init(){
+  const pillsWrap = document.getElementById('cat-pills');
+  const zonesWrap = document.getElementById('campus-zones');
+  try {
+    const [meta, stats] = await Promise.all([API.get('/api/meta'), API.get('/api/stats')]);
+    
+    // Category pills
+    meta.categories.forEach(c => {
+      const m = categoryMeta(c);
+      pillsWrap.insertAdjacentHTML('beforeend',
+        `<span class="cat-pill" style="--cat-color:${m.color}" data-category="${escapeHtml(c)}">
+           <span class="ic">${m.icon}</span>${escapeHtml(c)}
+         </span>`);
+    });
+
+    // Building dropdown
+    const bldSel = document.getElementById('f-building');
+    meta.buildings.forEach(b => bldSel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`));
+
+    // Campus map zones
+    const bCounts = stats.by_building || {};
+    const keyBuildings = [
+      { name: 'IICT Building', icon: '💻' },
+      { name: 'Academic Building A', icon: '🏛️' },
+      { name: 'Academic Building B', icon: '📐' },
+      { name: 'Academic Building C', icon: '🔬' },
+      { name: 'Central Library', icon: '📚' },
+      { name: 'Student Hall', icon: '🏢' },
+      { name: 'Roads & Ground', icon: '🛣️' },
+      { name: 'Cafeteria', icon: '☕' }
+    ];
+
+    zonesWrap.innerHTML = keyBuildings.map(k => {
+      const cnt = bCounts[k.name] || 0;
+      return `
+        <div class="zone-pill" data-building="${escapeHtml(k.name)}">
+          <div class="zone-title">${k.icon} ${escapeHtml(k.name)}</div>
+          <div class="zone-count">
+            <span class="zone-dot ${cnt === 0 ? 'low' : ''}"></span>
+            <span>${cnt} active ticket${cnt === 1 ? '' : 's'}</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    zonesWrap.querySelectorAll('.zone-pill').forEach(z => {
+      z.addEventListener('click', () => filterByBuilding(z.dataset.building));
+    });
+
+  } catch(e) { /* fallback */ }
+
+  pillsWrap.querySelectorAll('.cat-pill').forEach(pill =>
+    pill.addEventListener('click', () => setActiveCategory(pill.dataset.category)));
+
+  ['f-sort','f-status','f-building'].forEach(id =>
+    document.getElementById(id).addEventListener('change', () => {
+      const bld = document.getElementById('f-building').value;
+      document.querySelectorAll('.zone-pill').forEach(z => {
+        z.classList.toggle('active', z.dataset.building === bld);
+      });
+      loadPage(true);
+    }));
+
+  document.getElementById('clear-map-btn').addEventListener('click', () => {
+    filterByBuilding('');
+  });
+
+  let qTimer;
+  document.getElementById('f-q').addEventListener('input', () => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => loadPage(true), 350);
+  });
+  document.getElementById('load-more').addEventListener('click', () => loadPage(false));
+
+  const fromUrl = new URLSearchParams(location.search).get('category');
+  if (fromUrl) {
+    activeCategory = fromUrl;
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.cat-pill').forEach(p =>
+        p.classList.toggle('active', p.dataset.category === fromUrl));
+    });
+  }
+
+  loadPage(true);
+})();
+</script>
+</body>
+</html>

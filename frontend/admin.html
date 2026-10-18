@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Command Center — SUST FixIt</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar"><div id="nav-slot"></div></header>
+
+<div class="wrap" style="padding-top:32px">
+  <div class="section-head"><h2>Admin Command Center & Incident Analytics</h2></div>
+
+  <div class="kpis" id="kpis">
+    <div class="cell"><div class="n">—</div><div class="l">Total Incidents</div></div>
+    <div class="cell"><div class="n">—</div><div class="l">Reported (New)</div></div>
+    <div class="cell"><div class="n">—</div><div class="l">Verified</div></div>
+    <div class="cell"><div class="n">—</div><div class="l">In Progress</div></div>
+    <div class="cell"><div class="n">—</div><div class="l">Resolved</div></div>
+  </div>
+
+  <!-- Recharts-Style Interactive Analytics Grid -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:18px; margin-bottom:26px;">
+    <!-- Category Breakdown Chart -->
+    <div style="background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow);">
+      <h3 style="margin:0 0 14px; font-size:1rem; color:var(--teal-deep);">📊 Incident Distribution by Category</h3>
+      <div id="chart-cat-container" style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+        <svg id="donut-chart" width="130" height="130" viewBox="0 0 42 42" style="transform:rotate(-90deg);"></svg>
+        <div id="donut-legend" style="flex:1; display:flex; flex-direction:column; gap:6px; font-size:0.82rem;"></div>
+      </div>
+    </div>
+
+    <!-- Status Pipeline & Resolution Velocity -->
+    <div style="background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow);">
+      <h3 style="margin:0 0 14px; font-size:1rem; color:var(--teal-deep);">⚡ Incident Resolution Pipeline</h3>
+      <div id="pipeline-bars" style="display:flex; flex-direction:column; gap:12px; font-size:0.84rem;"></div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <select id="f-status">
+      <option value="">All statuses</option>
+      <option value="reported">Reported</option>
+      <option value="verified">Verified</option>
+      <option value="in_progress">In progress</option>
+      <option value="resolved">Resolved</option>
+    </select>
+    <select id="f-sort">
+      <option value="priority">Sort: Highest priority 🔥</option>
+      <option value="upvotes">Sort: Most upvoted ▲</option>
+      <option value="new">Sort: Newest 🕒</option>
+    </select>
+    <input type="text" id="f-q" placeholder="Search title, asset tag, or room…">
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Problem & Severity</th><th>Facility & Tag</th><th>Category</th><th>Priority</th><th>Upvotes</th><th>Status</th><th>Reported</th><th>Action</th>
+      </tr></thead>
+      <tbody id="tbody"><tr><td colspan="8">Loading incidents…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal">
+  <div class="modal">
+    <h3 id="modal-title">Update Incident Status</h3>
+    <p class="hint" id="modal-hint"></p>
+    <form id="modal-form">
+      <div class="field">
+        <label for="modal-status">New status</label>
+        <select id="modal-status">
+          <option value="verified">Verified</option>
+          <option value="in_progress">In progress</option>
+          <option value="resolved">Resolved</option>
+        </select>
+      </div>
+      <div class="field" id="photo-field">
+        <label for="modal-photo">After resolution photo (optional)</label>
+        <input type="file" id="modal-photo" accept="image/png,image/jpeg,image/gif,image/webp">
+      </div>
+      <div id="modal-alert"></div>
+      <div style="display:flex; gap:10px">
+        <button type="button" class="btn btn-ghost btn-block" id="modal-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-block">Save Status</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/feed-card.js"></script>
+<script>
+requireAdmin();
+renderNav('admin.html');
+
+let currentReportId = null;
+
+async function loadKpis(){
+  const s = await API.get('/api/stats');
+  const cells = document.querySelectorAll('#kpis .n');
+  cells[0].textContent = s.total;
+  cells[1].textContent = s.by_status.reported || 0;
+  cells[2].textContent = s.by_status.verified || 0;
+  cells[3].textContent = s.by_status.in_progress || 0;
+  cells[4].textContent = s.by_status.resolved || 0;
+
+  // Donut chart calculation
+  const donut = document.getElementById('donut-chart');
+  const legend = document.getElementById('donut-legend');
+  const catColors = {
+    'Electrical': '#d9a017',
+    'Furniture': '#a9713f',
+    'Plumbing': '#1f9ea0',
+    'Infrastructure': '#6f7680',
+    'Cleanliness': '#3fa772'
+  };
+
+  let totalCats = 0;
+  for (const k in s.by_category) totalCats += s.by_category[k];
+  if (totalCats === 0) totalCats = 1;
+
+  let offset = 0;
+  let circlesHtml = '<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="var(--paper-2)" stroke-width="6"/>';
+  let legendHtml = '';
+
+  for (const c in s.by_category) {
+    const count = s.by_category[c] || 0;
+    const pct = Math.round((count / totalCats) * 100);
+    const color = catColors[c] || '#0f766e';
+    if (count > 0) {
+      circlesHtml += `<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="${color}" stroke-width="6" stroke-dasharray="${pct} ${100 - pct}" stroke-dashoffset="${100 - offset}"/>`;
+      offset += pct;
+    }
+    legendHtml += `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="display:flex; align-items:center; gap:6px;">
+          <span style="width:10px; height:10px; border-radius:50%; background:${color};"></span>
+          ${escapeHtml(c)}
+        </span>
+        <b>${count} (${pct}%)</b>
+      </div>`;
+  }
+  donut.innerHTML = circlesHtml;
+  legend.innerHTML = legendHtml;
+
+  // Pipeline bars
+  const pipe = document.getElementById('pipeline-bars');
+  const pipeSteps = [
+    { label: 'Reported (Pending)', count: s.by_status.reported || 0, color: 'var(--st-reported)' },
+    { label: 'Verified', count: s.by_status.verified || 0, color: 'var(--st-verified)' },
+    { label: 'In Progress (SLA Active)', count: s.by_status.in_progress || 0, color: 'var(--st-progress)' },
+    { label: 'Resolved (Closed)', count: s.by_status.resolved || 0, color: 'var(--st-resolved)' },
+  ];
+  const maxPipe = Math.max(...pipeSteps.map(p => p.count), 1);
+  pipe.innerHTML = pipeSteps.map(p => `
+    <div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span>${p.label}</span>
+        <b>${p.count}</b>
+      </div>
+      <div style="height:9px; border-radius:4px; background:var(--paper-2); overflow:hidden;">
+        <div style="height:100%; width:${Math.round((p.count / maxPipe) * 100)}%; background:${p.color}; border-radius:4px; transition:width .4s ease;"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function row(r){
+  const pri = r.priority_score || 0;
+  const priClass = pri >= 100 ? 'pri-high' : pri >= 50 ? 'pri-med' : 'pri-normal';
+  const sevBadge = r.severity === 'CRITICAL'
+    ? '<span class="badge-severity sev-critical">🚨 CRIT</span>'
+    : r.severity === 'HIGH'
+    ? '<span class="badge-severity sev-high">⚠️ HIGH</span>'
+    : '';
+
+  return `<tr data-id="${r.id}">
+    <td class="title-cell">
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+        ${sevBadge}
+        <span>${escapeHtml(r.title)}</span>
+      </div>
+      <div class="hint">${escapeHtml(r.location)}</div>
+    </td>
+    <td>
+      <div><b>${escapeHtml(r.building)}</b></div>
+      <span class="asset-tag" style="font-size:0.68rem;">${escapeHtml(r.asset_tag || ('SUST-ID-' + r.id))}</span>
+    </td>
+    <td><span class="cat-chip-sm" style="--cat-color:${categoryMeta(r.category).color}">${categoryMeta(r.category).icon} ${escapeHtml(r.category)}</span></td>
+    <td><span class="badge-priority ${priClass}">🔥 ${pri}</span></td>
+    <td><strong>${r.upvote_count}</strong></td>
+    <td><span class="status-${r.status}">${STATUS_LABEL[r.status]}</span></td>
+    <td>${timeAgo(r.created_at)}</td>
+    <td>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button class="btn btn-sm btn-ghost" onclick="openIssueModal(${r.id})">Details</button>
+        ${r.status === 'resolved' ? '<span class="hint">Resolved</span>' : `<button class="btn btn-sm btn-primary" data-open="${r.id}">Update</button>`}
+      </div>
+    </td>
+  </tr>`;
+}
+
+async function loadTable(){
+  const tbody = document.getElementById('tbody');
+  const params = new URLSearchParams({
+    sort: document.getElementById('f-sort').value,
+    limit: 50,
+  });
+  const status = document.getElementById('f-status').value;
+  const q = document.getElementById('f-q').value.trim();
+  if (status) params.set('status', status);
+  if (q) params.set('q', q);
+  try {
+    const { reports } = await API.get('/api/reports?' + params.toString());
+    tbody.innerHTML = reports.length ? reports.map(row).join('') : '<tr><td colspan="8">No incident reports match.</td></tr>';
+    tbody.querySelectorAll('[data-open]').forEach(btn =>
+      btn.addEventListener('click', () => openModal(btn.dataset.open)));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8">Could not load: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function openModal(id){
+  currentReportId = id;
+  document.getElementById('modal-alert').innerHTML = '';
+  document.getElementById('modal-photo').value = '';
+  document.getElementById('modal-status').value = 'verified';
+  togglePhotoField();
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal(){ document.getElementById('modal').classList.add('hidden'); currentReportId = null; }
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+
+function togglePhotoField(){
+  const isResolve = document.getElementById('modal-status').value === 'resolved';
+  document.getElementById('modal-hint').textContent = isResolve
+    ? 'Upload proof that maintenance fixed this asset. Students see this as the official "After Photo".'
+    : 'Move this incident report to the next operational triage stage.';
+  document.getElementById('photo-field').style.display = isResolve ? 'block' : 'none';
+}
+document.getElementById('modal-status').addEventListener('change', togglePhotoField);
+
+document.getElementById('modal-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('modal-status').value;
+  const file = document.getElementById('modal-photo').files[0];
+  const alertSlot = document.getElementById('modal-alert');
+  const fd = new FormData();
+  fd.set('status', status);
+  if (file) fd.set('resolved_image', file);
+  try {
+    await API.postForm(`/api/admin/reports/${currentReportId}/status`, fd, 'PATCH');
+    closeModal();
+    loadTable();
+    loadKpis();
+    showToast('Status updated to ' + STATUS_LABEL[status], 'success');
+  } catch (err) {
+    alertSlot.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+  }
+});
+
+['f-status','f-sort'].forEach(id => document.getElementById(id).addEventListener('change', loadTable));
+let qTimer;
+document.getElementById('f-q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(loadTable, 350); });
+
+loadKpis();
+loadTable();
+</script>
+</body>
+</html>
