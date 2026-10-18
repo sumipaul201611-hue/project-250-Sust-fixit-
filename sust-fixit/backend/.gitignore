@@ -1,7 +1,0 @@
-.env
-*.db
-*.db-wal
-*.db-shm
-uploads/*
-!uploads/.gitkeep
-fixit
