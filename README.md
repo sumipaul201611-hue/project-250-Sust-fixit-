@@ -1,169 +1,58 @@
 # SUST FixIt
 
-**Report once, support many times.**
+SUST FixIt is a web-based platform for reporting and tracking problems on the SUST campus. Students can report issues such as broken fans, poor cleanliness, food quality problems, and Wi-Fi issues. Other students can view reports and upvote problems that need attention.
 
-A centralized campus problem-reporting platform. Students report problems
-(broken fans, water leaks, potholes, dirty areas) with a photo and exact
-location. Other students upvote existing reports instead of filing
-duplicates. Admins track and resolve issues, posting a before/after photo.
+The main goal of this project is to make campus problems easier to report and follow up on.
 
-## Scope (by design)
+## Features
 
-This build sticks to 6 core features, on purpose — a smaller, fully working
-system demos better than a bigger, half-working one:
+- **Student Login and Registration:** Students can create an account and log in.
+- **Report a Problem:** Students can submit a report with a title, description, building, location, category, and an optional photo.
+- **Similar Report Warning:** The system can show similar reports before a student submits a new one.
+- **Public Issue Feed:** Students can view reports submitted by others.
+- **Upvote Reports:** Students can upvote an existing report to show support for it.
+- **Admin Panel:** Admins can view reports and update their status.
+- **Status Tracking:** Students can follow a report as it moves from Reported to Verified, In Progress, and Resolved.
+- **Resolution Photo:** Admins can add an after-photo when marking a report as resolved.
 
-1. JWT login / register (restricted to your university email domain)
-2. Report a problem — building + exact location + category, with an **optional**
-   photo (patchy wifi, a dead camera, or just not having one on hand yet
-   shouldn't block a report — the feed shows a category icon in its place
-   until a photo is added)
-3. Public issue feed — category quick-filter pills, plus filter/search/sort
-   by newest or most-upvoted
-4. Upvote — one vote per student per report, toggle on/off
-5. Admin status tracking — Reported → Verified → In progress → Resolved
-6. Before/after resolution photo — also optional, same reasoning as above
+## Technologies Used
 
-Plus one "smart" feature that needs no AI: a **duplicate-suggestion** check.
-While a student is filling in the report form, the app matches their title +
-building + location + category against existing open reports and suggests
-upvoting instead, live, before they submit.
+- **Frontend:** HTML, CSS, JavaScript
+- **Backend:** Go (Golang)
+- **Database:** SQLite
+- **Authentication:** JWT
 
-**Deliberately left out** (future scope, not needed to demo the core idea):
-AI-based image classification, points/leaderboard, real-time notifications,
-cloud image storage, a full campus map, more than 5 categories, and a
-weighted priority-scoring algorithm. Any of these makes a good "future work"
-slide — none of them is needed to show problem → report → upvote → resolve.
+## Project Structure
 
-## Tech stack
-
-- **Backend:** Go, standard library only (`net/http`'s Go 1.22 router — no
-  Gin/Fiber needed for a project this size)
-- **Auth:** JWT (`golang-jwt/jwt/v5`), bcrypt password hashing
-- **Database:** SQLite (`modernc.org/sqlite`, pure Go — no C compiler or
-  separate DB server to install)
-- **Frontend:** Plain HTML/CSS/JS (no build step, no framework) — "Campus
-  Fresh" theme (teal + coral, Poppins/Inter), every report colour-coded by
-  category (left border, chip, icon) so the feed reads at a glance
-- **Photo storage:** local disk under `backend/uploads/`; photos are
-  optional everywhere they're asked for
-
-Everything runs from a single Go binary plus a folder of static files — no
-Docker, no external database, nothing else to install beyond Go itself.
-
-## Project structure
-
-```
+```text
 sust-fixit/
 ├── backend/
-│   ├── main.go        # server setup, routing, middleware
-│   ├── db.go           # SQLite connection + schema
-│   ├── driver.go       # the one file that imports the sqlite driver
-│   ├── auth.go         # JWT issuing/checking, register/login, rate limiting
-│   ├── reports.go      # feed, create/delete, upvote, duplicate-check, admin status
-│   ├── seed.go          # demo data (-seed flag) — embeds real campus photos
-│   ├── seed_assets/     # the real photos seed.go embeds (go:embed)
-│   ├── go.mod
-│   └── .env.example
-└── frontend/
-    ├── index.html       # landing page with live stats
-    ├── login.html / register.html
-    ├── feed.html         # public feed with filters
-    ├── report.html       # submission form with live duplicate-suggestion
-    ├── dashboard.html    # "my reports" with a status timeline
-    ├── admin.html        # KPI cards + table + status-update modal
-    ├── css/style.css
-    └── js/api.js, feed-card.js
+│   ├── main.go
+│   ├── reports.go
+│   └── ...
+├── frontend/
+│   ├── index.html
+│   ├── report.html
+│   ├── feed.html
+│   ├── admin.html
+│   ├── css/
+│   └── js/
+└── README.md
 ```
 
-## Running it
+## How to Run
 
-Requires Go 1.22+ (for the standard-library router used here).
+1. Install Go on your computer.
+2. Open a terminal in the backend folder.
+3. Run the following command:
+   ```powershell
+   go run .
+   ```
+4. Open your browser and visit:
+   `http://localhost:8080`
 
-```bash
-cd backend
-cp .env.example .env        # then edit JWT_SECRET, ADMIN_PASSWORD, etc.
-go mod tidy                  # downloads golang-jwt, x/crypto, modernc.org/sqlite
-go run . -seed                # -seed loads demo reports on first run only
-```
+Make sure the backend starts successfully before opening the website.
 
-Then open **http://localhost:8080** — the Go server serves both the API
-(under `/api/...`) and the `frontend/` folder, so there's nothing else to
-start.
+## Project Purpose
 
-The first run also creates an admin account from `ADMIN_EMAIL` /
-`ADMIN_PASSWORD` in your `.env` (defaults: `admin@sust.edu` / `admin12345` —
-**change this before showing it to anyone**). With `-seed`, three demo
-students are created too — see the terminal output for the login to use
-(password `student123`).
-
-### Environment variables
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `8080` | HTTP port |
-| `DB_PATH` | `fixit.db` | SQLite file path |
-| `UPLOAD_DIR` | `uploads` | Where photos are stored |
-| `JWT_SECRET` | *(dev fallback, insecure)* | Signs login tokens — **set a real one** |
-| `ALLOWED_EMAIL_DOMAIN` | `student.sust.edu` | Registration is restricted to `...@this`; leave empty to allow any email |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@sust.edu` / `admin12345` | First admin account, created on first startup |
-
-## API
-
-All endpoints are JSON except where noted; authenticated ones expect
-`Authorization: Bearer <token>`.
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| GET | `/api/meta` | – | Building/category/status lists (for form dropdowns) |
-| GET | `/api/stats` | – | Counts by status/category (for the KPI cards) |
-| POST | `/api/auth/register` | – | Create a student account |
-| POST | `/api/auth/login` | – | Get a JWT |
-| GET | `/api/auth/me` | ✅ | Current user |
-| GET | `/api/reports` | optional | Feed — `?status=&category=&building=&q=&sort=new\|upvotes&mine=1&limit=&offset=` |
-| GET | `/api/reports/{id}` | optional | One report |
-| GET | `/api/reports/similar` | optional | Duplicate-suggestion — `?title=&building=&category=&location=` |
-| POST | `/api/reports` | ✅ | Create (multipart: `title, description, category, building, location`, `image` optional) |
-| DELETE | `/api/reports/{id}` | ✅ | Delete own report (only while status is `reported`; admin can always delete) |
-| POST | `/api/reports/{id}/upvote` | ✅ | Toggle your upvote |
-| PATCH | `/api/admin/reports/{id}/status` | ✅ admin | `status=verified\|in_progress\|resolved` (multipart `resolved_image` optional) |
-
-## Notes on the implementation
-
-- **Duplicate suggestion** (`handleSimilar` in `reports.go`) is plain word
-  overlap on title/location plus a category match, restricted to open
-  reports in the same building — no AI/ML involved, matching the "simple
-  search/location matching" the brief called for.
-- **Photos are optional, both when reporting and when resolving.** A report
-  with no photo shows a category-coloured placeholder in the feed instead of
-  a broken image. When a photo is attached, it's validated by sniffing the
-  real file bytes (`http.DetectContentType`), not the filename or the
-  browser-supplied content type, and stored under a random name — a
-  student can't overwrite another photo or upload a disguised file.
-- **Seed data uses five real campus photos** (`backend/seed_assets/`,
-  embedded into the binary with `go:embed` so seeding works regardless of
-  the working directory) alongside a few reports seeded with *no* photo, to
-  demo both cases. The fan issue is seeded separately for Gallery 1, Gallery
-  2 and the common room — same category and building, different exact
-  location — which is exactly what the duplicate-suggestion check is meant
-  to catch versus let through.
-- **Upvotes** use a composite primary key `(user_id, report_id)`, so a
-  double-vote is impossible at the database level, not just in application
-  logic.
-- **Everything is a single SQLite file.** That's a deliberate simplification
-  for a two-person course project — see `db.go` if you'd rather point this
-  at Postgres later; the SQL is close enough to portable that it's a small
-  change, not a rewrite.
-
-## Presentation flow (5-7 minutes)
-
-1. Register/login as a student (or use the seeded `rafi@student.sust.edu` /
-   `student123`) → submit a report with a photo. Start typing a title that
-   matches a seeded demo report (e.g. "broken fan") to show the
-   duplicate-suggestion box appear live.
-2. Open a second browser (or incognito) as another student → upvote the
-   same report → refresh the first tab to show the count update.
-3. Log in as admin → show the KPI cards and the table sorted by upvotes →
-   change a report's status through Verified → In progress → Resolved,
-   uploading an "after" photo at the resolve step.
-4. Back in the student dashboard, show the status timeline reflect the
-   change.
+SUST FixIt was developed as a web technology project to help students report campus problems and make it easier to track their progress until they are resolved.
