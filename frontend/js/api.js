@@ -91,11 +91,19 @@ function statusTag(status){
 // admin table). Keeping this one map means a category always looks the same
 // everywhere — that consistency is what makes "browsing by category" work.
 const CATEGORY_META = {
-  Electrical:      { icon: '⚡', color: 'var(--cat-electrical)' },
-  Furniture:       { icon: '🪑', color: 'var(--cat-furniture)' },
-  Plumbing:        { icon: '🚰', color: 'var(--cat-plumbing)' },
-  Infrastructure:  { icon: '🛣️', color: 'var(--cat-infra)' },
-  Cleanliness:     { icon: '🧹', color: 'var(--cat-clean)' },
+  'Electrical':               { icon: '⚡', color: 'var(--cat-electrical)' },
+  'Food & Dining':            { icon: '🍲', color: 'var(--cat-food)' },
+  'Wi-Fi & Internet':         { icon: '📶', color: 'var(--cat-wifi)' },
+  'Plumbing & Water':         { icon: '🚰', color: 'var(--cat-plumbing)' },
+  'Roads & Infrastructure':   { icon: '🛣️', color: 'var(--cat-infra)' },
+  'Furniture & Facilities':   { icon: '🪑', color: 'var(--cat-furniture)' },
+  'Cleanliness & Sanitation': { icon: '🧹', color: 'var(--cat-clean)' },
+  'Other':                    { icon: '📌', color: 'var(--cat-other)' },
+  // Backward-compatibility aliases
+  'Furniture':                { icon: '🪑', color: 'var(--cat-furniture)' },
+  'Plumbing':                 { icon: '🚰', color: 'var(--cat-plumbing)' },
+  'Infrastructure':           { icon: '🛣️', color: 'var(--cat-infra)' },
+  'Cleanliness':              { icon: '🧹', color: 'var(--cat-clean)' },
 };
 function categoryMeta(cat){
   return CATEGORY_META[cat] || { icon: '📍', color: 'var(--teal)' };

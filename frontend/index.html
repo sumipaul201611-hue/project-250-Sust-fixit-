@@ -53,14 +53,17 @@
   <div class="section-head" style="margin-top:40px;">
     <div>
       <h2>🏆 FixIt Heroes Leaderboard</h2>
-      <p style="margin:2px 0 0; color:var(--muted); font-size:0.88rem;">Recognizing top student contributors who keep our campus operational</p>
+      <p style="margin:2px 0 0; color:var(--muted); font-size:0.88rem;">
+        Recognizing top student contributors who keep our campus operational · 
+        <span style="font-size:0.81rem; color:var(--muted); font-weight:500;">(Demo profiles are labeled with 🧪 Demo Profile to indicate sample data)</span>
+      </p>
     </div>
   </div>
   <div class="heroes-grid" id="heroes-grid"></div>
 
   <div class="section-head" style="margin-top:40px;">
-    <h2>🔥 High-Priority Campus Issues</h2>
-    <a href="feed.html?sort=priority" class="btn btn-ghost btn-sm">See full feed →</a>
+    <h2>🔥 Top Supported Issues</h2>
+    <a href="feed.html?sort=upvotes" class="btn btn-ghost btn-sm">See full feed →</a>
   </div>
   <div class="report-grid" id="recent-grid"></div>
 </div>
@@ -88,22 +91,29 @@ renderNav('index.html');
     // Leaderboard
     const heroesWrap = document.getElementById('heroes-grid');
     if (stats.top_reporters && stats.top_reporters.length > 0) {
-      heroesWrap.innerHTML = stats.top_reporters.map(h => `
-        <div class="hero-card">
-          <div class="hero-avatar">${escapeHtml(h.name.charAt(0))}</div>
-          <div class="hero-name">${escapeHtml(h.name)}</div>
-          <div class="hero-dept">${escapeHtml(h.department || 'SUST')} Department</div>
-          <div class="hero-badge">${escapeHtml(h.badge)}</div>
-          <div class="hero-pts">⭐ ${h.points} pts · ${h.reports} report${h.reports === 1 ? '' : 's'}</div>
-        </div>
-      `).join('');
+      heroesWrap.innerHTML = stats.top_reporters.map(h => {
+        const accountBadge = h.is_demo
+          ? '<span class="account-tag tag-demo" title="Sample demonstration profile">🧪 Demo Profile</span>'
+          : '<span class="account-tag tag-registered" title="Registered student account">🎓 Registered Student</span>';
+        return `
+          <div class="hero-card">
+            <div class="hero-avatar">${escapeHtml(h.name.charAt(0))}</div>
+            <div class="hero-name">${escapeHtml(h.name)}</div>
+            <div class="hero-dept">${escapeHtml(h.department || 'SUST')} Department</div>
+            <div style="display:flex; justify-content:center; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+              <span class="hero-badge">${escapeHtml(h.badge)}</span>
+              ${accountBadge}
+            </div>
+            <div class="hero-pts">⭐ ${h.points} pts · ${h.reports} report${h.reports === 1 ? '' : 's'}</div>
+          </div>`;
+      }).join('');
     } else {
       heroesWrap.innerHTML = '<div class="empty">Be the first student to file a report and join the leaderboard!</div>';
     }
   } catch(e) { /* stats fallback */ }
 
   try {
-    const { reports } = await API.get('/api/reports?limit=3&sort=priority');
+    const { reports } = await API.get('/api/reports?limit=3&sort=upvotes');
     if (!reports.length) {
       grid.outerHTML = '<div class="empty">No problems reported yet — be the first to report one.</div>';
     } else {

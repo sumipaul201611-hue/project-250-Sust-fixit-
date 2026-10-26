@@ -32,7 +32,6 @@
 
   <div class="filters">
     <select id="f-sort">
-      <option value="priority">🔥 Highest Priority</option>
       <option value="upvotes">▲ Most Upvoted</option>
       <option value="new">🕒 Newest</option>
     </select>
@@ -44,7 +43,7 @@
       <option value="resolved">Resolved</option>
     </select>
     <select id="f-building"><option value="">All buildings</option></select>
-    <input type="text" id="f-q" placeholder="Search title, asset tag, or room…">
+    <input type="text" id="f-q" placeholder="Search title or location…">
     <div class="spacer"></div>
     <a href="report.html" class="btn btn-primary btn-sm">+ Report a problem</a>
   </div>
@@ -154,9 +153,10 @@ function filterByBuilding(bld){
       { name: 'Academic Building B', icon: '📐' },
       { name: 'Academic Building C', icon: '🔬' },
       { name: 'Central Library', icon: '📚' },
-      { name: 'Student Hall', icon: '🏢' },
-      { name: 'Roads & Ground', icon: '🛣️' },
-      { name: 'Cafeteria', icon: '☕' }
+      { name: 'Shah Paran Hall', icon: '🏢' },
+      { name: 'Bijoy 24 Hall', icon: '🏢' },
+      { name: 'University Center & Cafeteria', icon: '🍲' },
+      { name: 'Roads & Campus Grounds', icon: '🛣️' }
     ];
 
     zonesWrap.innerHTML = keyBuildings.map(k => {

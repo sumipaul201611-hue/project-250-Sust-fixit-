@@ -47,19 +47,18 @@
       <option value="resolved">Resolved</option>
     </select>
     <select id="f-sort">
-      <option value="priority">Sort: Highest priority 🔥</option>
       <option value="upvotes">Sort: Most upvoted ▲</option>
       <option value="new">Sort: Newest 🕒</option>
     </select>
-    <input type="text" id="f-q" placeholder="Search title, asset tag, or room…">
+    <input type="text" id="f-q" placeholder="Search title or location…">
   </div>
 
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>Problem & Severity</th><th>Facility & Tag</th><th>Category</th><th>Priority</th><th>Upvotes</th><th>Status</th><th>Reported</th><th>Action</th>
+        <th>Problem</th><th>Facility / Location</th><th>Category</th><th>Upvotes</th><th>Status</th><th>Reported</th><th>Action</th>
       </tr></thead>
-      <tbody id="tbody"><tr><td colspan="8">Loading incidents…</td></tr></tbody>
+      <tbody id="tbody"><tr><td colspan="7">Loading incidents…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -111,11 +110,18 @@ async function loadKpis(){
   const donut = document.getElementById('donut-chart');
   const legend = document.getElementById('donut-legend');
   const catColors = {
-    'Electrical': '#d9a017',
-    'Furniture': '#a9713f',
-    'Plumbing': '#1f9ea0',
-    'Infrastructure': '#6f7680',
-    'Cleanliness': '#3fa772'
+    'Electrical': '#d97706',
+    'Food & Dining': '#e05d44',
+    'Wi-Fi & Internet': '#2563eb',
+    'Plumbing & Water': '#0d9488',
+    'Roads & Infrastructure': '#64748b',
+    'Furniture & Facilities': '#a16207',
+    'Cleanliness & Sanitation': '#16a34a',
+    'Other': '#7c3aed',
+    'Furniture': '#a16207',
+    'Plumbing': '#0d9488',
+    'Infrastructure': '#64748b',
+    'Cleanliness': '#16a34a'
   };
 
   let totalCats = 0;
@@ -129,7 +135,7 @@ async function loadKpis(){
   for (const c in s.by_category) {
     const count = s.by_category[c] || 0;
     const pct = Math.round((count / totalCats) * 100);
-    const color = catColors[c] || '#0f766e';
+    const color = catColors[c] || '#147D70';
     if (count > 0) {
       circlesHtml += `<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="${color}" stroke-width="6" stroke-dasharray="${pct} ${100 - pct}" stroke-dashoffset="${100 - offset}"/>`;
       offset += pct;
@@ -169,28 +175,15 @@ async function loadKpis(){
 }
 
 function row(r){
-  const pri = r.priority_score || 0;
-  const priClass = pri >= 100 ? 'pri-high' : pri >= 50 ? 'pri-med' : 'pri-normal';
-  const sevBadge = r.severity === 'CRITICAL'
-    ? '<span class="badge-severity sev-critical">🚨 CRIT</span>'
-    : r.severity === 'HIGH'
-    ? '<span class="badge-severity sev-high">⚠️ HIGH</span>'
-    : '';
-
   return `<tr data-id="${r.id}">
     <td class="title-cell">
-      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-        ${sevBadge}
-        <span>${escapeHtml(r.title)}</span>
-      </div>
+      <span>${escapeHtml(r.title)}</span>
       <div class="hint">${escapeHtml(r.location)}</div>
     </td>
     <td>
-      <div><b>${escapeHtml(r.building)}</b></div>
-      <span class="asset-tag" style="font-size:0.68rem;">${escapeHtml(r.asset_tag || ('SUST-ID-' + r.id))}</span>
+      <b>${escapeHtml(r.building)}</b>
     </td>
     <td><span class="cat-chip-sm" style="--cat-color:${categoryMeta(r.category).color}">${categoryMeta(r.category).icon} ${escapeHtml(r.category)}</span></td>
-    <td><span class="badge-priority ${priClass}">🔥 ${pri}</span></td>
     <td><strong>${r.upvote_count}</strong></td>
     <td><span class="status-${r.status}">${STATUS_LABEL[r.status]}</span></td>
     <td>${timeAgo(r.created_at)}</td>
@@ -215,11 +208,11 @@ async function loadTable(){
   if (q) params.set('q', q);
   try {
     const { reports } = await API.get('/api/reports?' + params.toString());
-    tbody.innerHTML = reports.length ? reports.map(row).join('') : '<tr><td colspan="8">No incident reports match.</td></tr>';
+    tbody.innerHTML = reports.length ? reports.map(row).join('') : '<tr><td colspan="7">No incident reports match.</td></tr>';
     tbody.querySelectorAll('[data-open]').forEach(btn =>
       btn.addEventListener('click', () => openModal(btn.dataset.open)));
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8">Could not load: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7">Could not load: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 

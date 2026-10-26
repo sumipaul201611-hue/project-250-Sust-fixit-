@@ -89,9 +89,9 @@ func (a *App) seedDemoData() error {
 	// for "photo is optional" — the feed shows the category placeholder.
 	type item struct {
 		title, desc, cat, building, loc, status string
-		votes, daysAgo                           int
-		photo                                    string // seed_assets filename, or "" for no photo
-		afterSVG                                 string // label for a generated "after" photo, or ""
+		votes, daysAgo                          int
+		photo                                   string // seed_assets filename, or "" for no photo
+		afterSVG                                string // label for a generated "after" photo, or ""
 	}
 	items := []item{
 		// Real campus photos (the fan issue is reported separately for three
@@ -107,22 +107,23 @@ func (a *App) seedDemoData() error {
 		{"Ceiling fan not working in Gallery 2", "Same issue as Gallery 1 — the fan doesn't start even after multiple switch toggles.",
 			"Electrical", "IICT Building", "Gallery 2 (Seminar Room)", "reported", 6, 2, "ceiling-fan.jpg", ""},
 		{"Ceiling fan not working in the common room", "The fan in the shared common room has stopped completely, affecting everyone who uses the space between classes.",
-			"Electrical", "Student Hall", "Common room", "verified", 14, 7, "common-room.jpg", ""},
+			"Electrical", "Shah Paran Hall", "Common room", "verified", 14, 7, "common-room.jpg", ""},
 		{"Large waterlogged pothole on the road in front of IICT", "A deep pothole fills with muddy water whenever it rains, making the road in front of IICT hard to cross on foot, bike, or rickshaw.",
-			"Infrastructure", "Roads & Ground", "Main road in front of IICT Building", "reported", 31, 6, "road-pothole.jpg", ""},
+			"Roads & Infrastructure", "Roads & Campus Grounds", "Main road in front of IICT Building", "reported", 31, 6, "road-pothole.jpg", ""},
 		{"Hand-wash basin broken, no water on 2nd floor", "The basin tap is damaged and there's no running water at all on this floor, so students can't wash their hands between labs.",
-			"Plumbing", "IICT Building", "2nd floor washroom", "verified", 11, 4, "basin-no-water.jpg", ""},
+			"Plumbing & Water", "IICT Building", "2nd floor washroom", "verified", 11, 4, "basin-no-water.jpg", ""},
 
-		// A few reports filed with no photo — a slow or dead wifi connection,
-		// a phone with no working camera, or simply not having one on hand
-		// yet. The feed shows a category placeholder for these instead of a
-		// broken image, and the photo can be added later.
-		{"Wifi not working in the reading room", "No wifi signal at all since this morning in the reading room — couldn't take a photo on my phone either since it also needs wifi to upload right now.",
-			"Infrastructure", "Central Library", "2nd floor reading room", "reported", 5, 1, "", ""},
-		{"Broken chairs in Room 204", "Four chairs in the back rows have broken arm rests and one has a loose leg.",
-			"Furniture", "Academic Building B", "Room 204, 2nd floor", "reported", 3, 2, "", ""},
+		// A few reports filed with no photo — food quality, wifi outage,
+		// or broken desks where students choose not to take a photo.
+		// The feed shows a category placeholder for these instead of a broken image.
+		{"Wifi not working in the reading room", "No wifi signal at all since this morning in the reading room [SSID: SUST-STUDENT | Problem: No connection] — couldn't take a photo on my phone either since it also needs wifi to upload right now.",
+			"Wi-Fi & Internet", "Central Library", "2nd floor reading room", "in_progress", 23, 1, "", ""},
+		{"Undercooked rice and spoiled lentils in Shah Paran Dining", "Lunch served today had stale smelling lentils and hard undercooked rice [Dining: Shah Paran Hall Mess 2 | Meal: Lunch | Issue: Quality & Hygiene]. Multiple students had to skip their meal.",
+			"Food & Dining", "Shah Paran Hall", "Mess 2 (Ground Floor)", "verified", 27, 2, "", ""},
+		{"Broken chairs and desks in Room 204", "Four chairs in the back rows have broken arm rests and one has a loose leg.",
+			"Furniture & Facilities", "Academic Building B", "Room 204, 2nd floor", "reported", 7, 2, "", ""},
 		{"Overflowing dustbin near the cafeteria", "The dustbin is full by noon every day and waste spreads to the entrance.",
-			"Cleanliness", "Cafeteria", "Front entrance", "reported", 4, 1, "", ""},
+			"Cleanliness & Sanitation", "University Center & Cafeteria", "Front entrance", "reported", 12, 1, "", ""},
 
 		// One fully resolved example with a generated before/after pair, to
 		// demo the resolution-photo flow end to end.
@@ -179,6 +180,12 @@ func (a *App) seedDemoData() error {
 			if after, err = svg(fmt.Sprintf("demo-%d-after.svg", i+1), "#1f9d6e", it.afterSVG); err != nil {
 				return err
 			}
+		}
+
+		var exists int
+		_ = a.db.QueryRow("SELECT COUNT(*) FROM reports WHERE title = ? AND building = ? AND location = ?", it.title, it.building, it.loc).Scan(&exists)
+		if exists > 0 {
+			continue
 		}
 
 		res, err := a.db.Exec(

@@ -25,16 +25,70 @@ const maxUpload = 5 << 20 // 5 MB per photo
 // Fixed lists keep the data clean (and the frontend reads them from /api/meta).
 var (
 	buildings = []string{
-		"IICT Building", "Academic Building A", "Academic Building B", "Academic Building C",
-		"Central Library", "Cafeteria", "Auditorium", "Student Hall", "Roads & Ground", "Other",
+		"IICT Building", "Academic Building A", "Academic Building B", "Academic Building C", "Academic Building D",
+		"Central Library", "Cafeteria", "Auditorium", "Student Hall", "Shah Paran Hall", "Bijoy 24 Hall",
+		"Syed Mujtaba Ali Hall", "First Lady Hall", "Begum Fazilatunnesa Mujib Hall", "Roads & Campus Grounds", "University Center & Cafeteria", "Other",
 	}
-	categories = []string{"Electrical", "Furniture", "Plumbing", "Infrastructure", "Cleanliness"}
-	statuses   = []string{"reported", "verified", "in_progress", "resolved"}
+	categories = []string{
+		"Electrical",
+		"Food & Dining",
+		"Wi-Fi & Internet",
+		"Plumbing & Water",
+		"Roads & Infrastructure",
+		"Furniture & Facilities",
+		"Cleanliness & Sanitation",
+		"Other",
+	}
+	statuses = []string{"reported", "verified", "in_progress", "resolved"}
 
 	imageTypes = map[string]string{
 		"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp",
 	}
 )
+
+func normalizeCategory(cat string) string {
+	c := strings.TrimSpace(cat)
+	switch {
+	case strings.EqualFold(c, "Plumbing") || strings.EqualFold(c, "Plumbing & Water"):
+		return "Plumbing & Water"
+	case strings.EqualFold(c, "Infrastructure") || strings.EqualFold(c, "Roads & Infrastructure"):
+		return "Roads & Infrastructure"
+	case strings.EqualFold(c, "Furniture") || strings.EqualFold(c, "Furniture & Facilities"):
+		return "Furniture & Facilities"
+	case strings.EqualFold(c, "Cleanliness") || strings.EqualFold(c, "Cleanliness & Sanitation"):
+		return "Cleanliness & Sanitation"
+	case strings.EqualFold(c, "Food") || strings.EqualFold(c, "Food & Dining") || strings.EqualFold(c, "Dining"):
+		return "Food & Dining"
+	case strings.EqualFold(c, "Wifi") || strings.EqualFold(c, "Wi-Fi") || strings.EqualFold(c, "Wi-Fi & Internet") || strings.EqualFold(c, "Internet"):
+		return "Wi-Fi & Internet"
+	case strings.EqualFold(c, "Electrical"):
+		return "Electrical"
+	case strings.EqualFold(c, "Other"):
+		return "Other"
+	default:
+		return cat
+	}
+}
+
+func categoryAliases(cat string) []string {
+	norm := normalizeCategory(cat)
+	switch norm {
+	case "Roads & Infrastructure":
+		return []string{"Roads & Infrastructure", "Infrastructure"}
+	case "Plumbing & Water":
+		return []string{"Plumbing & Water", "Plumbing"}
+	case "Furniture & Facilities":
+		return []string{"Furniture & Facilities", "Furniture"}
+	case "Cleanliness & Sanitation":
+		return []string{"Cleanliness & Sanitation", "Cleanliness"}
+	case "Food & Dining":
+		return []string{"Food & Dining", "Food", "Dining"}
+	case "Wi-Fi & Internet":
+		return []string{"Wi-Fi & Internet", "Wi-Fi", "Wifi", "Internet"}
+	default:
+		return []string{norm}
+	}
+}
 
 type Report struct {
 	ID               int64  `json:"id"`
@@ -65,15 +119,19 @@ func CalculatePriority(cat string, upvotes int, createdAtStr, desc, title string
 
 	// Category Urgency Weight
 	switch cat {
-	case "Infrastructure":
+	case "Roads & Infrastructure", "Infrastructure":
 		score += 45 // Road pothole, structural cracks
 	case "Electrical":
 		score += 40 // Fire hazard, fan/light outage
-	case "Plumbing":
+	case "Plumbing & Water", "Plumbing":
 		score += 35 // Water leak, no sanitation water
-	case "Cleanliness":
+	case "Food & Dining":
+		score += 35 // Health & nutrition risk, food hygiene
+	case "Wi-Fi & Internet":
+		score += 30 // Academic & research connectivity
+	case "Cleanliness & Sanitation", "Cleanliness":
 		score += 25
-	case "Furniture":
+	case "Furniture & Facilities", "Furniture":
 		score += 20
 	default:
 		score += 15
@@ -84,11 +142,13 @@ func CalculatePriority(cat string, upvotes int, createdAtStr, desc, title string
 	severity := "MEDIUM"
 	if strings.Contains(text, "fire") || strings.Contains(text, "spark") || strings.Contains(text, "shock") ||
 		strings.Contains(text, "danger") || strings.Contains(text, "burn") || strings.Contains(text, "burst") ||
-		strings.Contains(text, "emergency") {
+		strings.Contains(text, "emergency") || strings.Contains(text, "poison") || strings.Contains(text, "rotten") {
 		score += 55
 		severity = "CRITICAL"
 	} else if strings.Contains(text, "leak") || strings.Contains(text, "pothole") || strings.Contains(text, "dark") ||
-		strings.Contains(text, "flood") || strings.Contains(text, "muddy") || strings.Contains(text, "broken") {
+		strings.Contains(text, "flood") || strings.Contains(text, "muddy") || strings.Contains(text, "broken") ||
+		strings.Contains(text, "undercooked") || strings.Contains(text, "cold food") || strings.Contains(text, "no internet") ||
+		strings.Contains(text, "disconnected") {
 		score += 20
 		severity = "HIGH"
 	}
@@ -165,6 +225,15 @@ func scanReport(row interface{ Scan(...any) error }, viewerID int64) (Report, er
 	err := row.Scan(&rp.ID, &rp.Title, &rp.Description, &rp.Category, &rp.Building, &rp.Location,
 		&rp.ImageURL, &rp.ResolvedImageURL, &rp.Status, &rp.CreatedAt, &rp.UpdatedAt,
 		&ownerID, &rp.ReporterName, &rp.UpvoteCount, &voted)
+	rp.Category = normalizeCategory(rp.Category)
+	switch rp.Building {
+	case "Student Hall":
+		rp.Building = "Shah Paran Hall"
+	case "Roads & Ground":
+		rp.Building = "Roads & Campus Grounds"
+	case "Cafeteria":
+		rp.Building = "University Center & Cafeteria"
+	}
 	rp.HasUpvoted = voted == 1
 	rp.IsMine = viewerID != 0 && ownerID == viewerID
 	rp.PriorityScore, rp.Severity = CalculatePriority(rp.Category, rp.UpvoteCount, rp.CreatedAt, rp.Description, rp.Title)
@@ -200,6 +269,25 @@ func (a *App) handleMeta(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// SeededDemoUserEmails explicitly lists seeded demonstration accounts.
+// Accounts in this set are flagged as is_demo: true on the leaderboard and API
+// so presentation sample data is transparently distinguished from real student activity.
+var SeededDemoUserEmails = map[string]bool{
+	"rafi@student.sust.edu":   true,
+	"nusrat@student.sust.edu": true,
+	"tanvir@student.sust.edu": true,
+}
+
+func isDemoStudent(email, studentID string) bool {
+	if SeededDemoUserEmails[strings.ToLower(strings.TrimSpace(email))] {
+		return true
+	}
+	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(studentID)), "DEMO") {
+		return true
+	}
+	return false
+}
+
 func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 	byStatus := map[string]int{}
 	byCategory := map[string]int{}
@@ -213,9 +301,18 @@ func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Could not load statistics")
 		return
 	}
-	if err := a.countGroups("category", byCategory); err != nil {
+	catRows, err := a.db.Query("SELECT category, COUNT(*) FROM reports GROUP BY category")
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "Could not load statistics")
 		return
+	}
+	defer catRows.Close()
+	for catRows.Next() {
+		var c string
+		var n int
+		if err := catRows.Scan(&c, &n); err == nil {
+			byCategory[normalizeCategory(c)] += n
+		}
 	}
 	total := 0
 	for _, n := range byStatus {
@@ -223,7 +320,25 @@ func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	byBuilding := map[string]int{}
-	_ = a.countGroups("building", byBuilding)
+	bldRows, err := a.db.Query("SELECT building, COUNT(*) FROM reports GROUP BY building")
+	if err == nil {
+		defer bldRows.Close()
+		for bldRows.Next() {
+			var bld string
+			var n int
+			if err := bldRows.Scan(&bld, &n); err == nil {
+				switch bld {
+				case "Student Hall":
+					bld = "Shah Paran Hall"
+				case "Roads & Ground":
+					bld = "Roads & Campus Grounds"
+				case "Cafeteria":
+					bld = "University Center & Cafeteria"
+				}
+				byBuilding[bld] += n
+			}
+		}
+	}
 
 	type Hero struct {
 		Name       string `json:"name"`
@@ -231,10 +346,11 @@ func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 		Reports    int    `json:"reports"`
 		Points     int    `json:"points"`
 		Badge      string `json:"badge"`
+		IsDemo     bool   `json:"is_demo"`
 	}
 	var heroes []Hero
 	heroRows, err := a.db.Query(`
-		SELECT u.name, u.department, COUNT(r.id) as cnt,
+		SELECT u.name, u.department, u.email, u.student_id, COUNT(r.id) as cnt,
 		       (COUNT(r.id)*25 + COALESCE(SUM(CASE WHEN r.status = 'resolved' THEN 50 ELSE 0 END), 0)) as pts
 		FROM users u
 		JOIN reports r ON r.user_id = u.id
@@ -247,7 +363,9 @@ func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 		rank := 1
 		for heroRows.Next() {
 			var h Hero
-			if err := heroRows.Scan(&h.Name, &h.Department, &h.Reports, &h.Points); err == nil {
+			var email, studentID string
+			if err := heroRows.Scan(&h.Name, &h.Department, &email, &studentID, &h.Reports, &h.Points); err == nil {
+				h.IsDemo = isDemoStudent(email, studentID)
 				switch rank {
 				case 1:
 					h.Badge = "Campus Champion 🥇"
@@ -313,12 +431,29 @@ func (a *App) handleListReports(w http.ResponseWriter, r *http.Request) {
 		where = append(where, "r.status != 'resolved'")
 	}
 	if v := q.Get("category"); v != "" {
-		where = append(where, "r.category = ?")
-		args = append(args, v)
+		aliases := categoryAliases(v)
+		placeholders := make([]string, len(aliases))
+		for i, a := range aliases {
+			placeholders[i] = "r.category = ?"
+			args = append(args, a)
+		}
+		where = append(where, "("+strings.Join(placeholders, " OR ")+")")
 	}
 	if v := q.Get("building"); v != "" {
-		where = append(where, "r.building = ?")
-		args = append(args, v)
+		switch v {
+		case "Shah Paran Hall":
+			where = append(where, "(r.building = ? OR r.building = 'Student Hall')")
+			args = append(args, v)
+		case "Roads & Campus Grounds":
+			where = append(where, "(r.building = ? OR r.building = 'Roads & Ground')")
+			args = append(args, v)
+		case "University Center & Cafeteria":
+			where = append(where, "(r.building = ? OR r.building = 'Cafeteria')")
+			args = append(args, v)
+		default:
+			where = append(where, "r.building = ?")
+			args = append(args, v)
+		}
 	}
 	if q.Get("mine") == "1" {
 		if viewer == nil {
@@ -342,10 +477,10 @@ func (a *App) handleListReports(w http.ResponseWriter, r *http.Request) {
 		"new":      "ORDER BY r.id DESC",
 		"old":      "ORDER BY r.id ASC",
 		"upvotes":  "ORDER BY (SELECT COUNT(*) FROM upvotes v WHERE v.report_id = r.id) DESC, r.id DESC",
-		"priority": "ORDER BY ((SELECT COUNT(*) FROM upvotes v WHERE v.report_id = r.id)*3 + CASE r.category WHEN 'Infrastructure' THEN 45 WHEN 'Electrical' THEN 40 WHEN 'Plumbing' THEN 35 WHEN 'Cleanliness' THEN 25 ELSE 20 END) DESC, r.id DESC",
+		"priority": "ORDER BY ((SELECT COUNT(*) FROM upvotes v WHERE v.report_id = r.id)*3 + CASE r.category WHEN 'Roads & Infrastructure' THEN 45 WHEN 'Infrastructure' THEN 45 WHEN 'Electrical' THEN 40 WHEN 'Plumbing & Water' THEN 35 WHEN 'Plumbing' THEN 35 WHEN 'Food & Dining' THEN 35 WHEN 'Wi-Fi & Internet' THEN 30 WHEN 'Cleanliness & Sanitation' THEN 25 WHEN 'Cleanliness' THEN 25 ELSE 20 END) DESC, r.id DESC",
 	}[q.Get("sort")]
 	if order == "" {
-		order = "ORDER BY ((SELECT COUNT(*) FROM upvotes v WHERE v.report_id = r.id)*3 + CASE r.category WHEN 'Infrastructure' THEN 45 WHEN 'Electrical' THEN 40 WHEN 'Plumbing' THEN 35 WHEN 'Cleanliness' THEN 25 ELSE 20 END) DESC, r.id DESC"
+		order = "ORDER BY ((SELECT COUNT(*) FROM upvotes v WHERE v.report_id = r.id)*3 + CASE r.category WHEN 'Roads & Infrastructure' THEN 45 WHEN 'Infrastructure' THEN 45 WHEN 'Electrical' THEN 40 WHEN 'Plumbing & Water' THEN 35 WHEN 'Plumbing' THEN 35 WHEN 'Food & Dining' THEN 35 WHEN 'Wi-Fi & Internet' THEN 30 WHEN 'Cleanliness & Sanitation' THEN 25 WHEN 'Cleanliness' THEN 25 ELSE 20 END) DESC, r.id DESC"
 	}
 
 	limit, _ := strconv.Atoi(q.Get("limit"))
@@ -503,8 +638,8 @@ func (a *App) handleCreateReport(w http.ResponseWriter, r *http.Request, u *User
 
 	title := strings.TrimSpace(r.FormValue("title"))
 	desc := strings.TrimSpace(r.FormValue("description"))
-	category := r.FormValue("category")
-	building := r.FormValue("building")
+	category := normalizeCategory(r.FormValue("category"))
+	building := strings.TrimSpace(r.FormValue("building"))
 	location := strings.TrimSpace(r.FormValue("location"))
 
 	titleLen := utf8.RuneCountInString(title)
@@ -534,6 +669,25 @@ func (a *App) handleCreateReport(w http.ResponseWriter, r *http.Request, u *User
 			}
 			imgURL = saved
 		}
+
+		// Server-side duplicate debounce protection:
+		// If the same user submits an identical report (same title, building, location) within the last 15 seconds,
+		// return the existing report idempotently to prevent accidental duplicate insertions.
+		var dupID int64
+		errDup := a.db.QueryRow(`
+			SELECT id FROM reports
+			WHERE user_id = ? AND title = ? AND building = ? AND location = ?
+			  AND datetime(created_at) >= datetime('now', '-15 seconds')
+			ORDER BY id DESC LIMIT 1`, u.ID, title, building, location).Scan(&dupID)
+		if errDup == nil && dupID > 0 {
+			a.removeUpload(imgURL)
+			rp, err := a.getReport(dupID, u.ID)
+			if err == nil {
+				writeJSON(w, http.StatusOK, map[string]any{"report": rp})
+				return
+			}
+		}
+
 		now := nowStr()
 		res, err := a.db.Exec(
 			`INSERT INTO reports (user_id, title, description, category, building, location, image_url, status, created_at, updated_at)
@@ -603,6 +757,27 @@ func (a *App) handleToggleUpvote(w http.ResponseWriter, r *http.Request, u *User
 		writeErr(w, http.StatusNotFound, "Report not found")
 		return
 	}
+	// Check if action is specified as "vote" (to ensure upvoted without toggling off)
+	action := r.URL.Query().Get("action")
+	if action == "vote" || r.URL.Query().Get("ensure") == "true" {
+		var already int
+		_ = a.db.QueryRow("SELECT COUNT(*) FROM upvotes WHERE user_id = ? AND report_id = ?", u.ID, id).Scan(&already)
+		if already > 0 {
+			var count int
+			_ = a.db.QueryRow("SELECT COUNT(*) FROM upvotes WHERE report_id = ?", id).Scan(&count)
+			writeJSON(w, http.StatusOK, map[string]any{"upvoted": true, "already_upvoted": true, "upvote_count": count})
+			return
+		}
+		if _, err := a.db.Exec("INSERT OR IGNORE INTO upvotes (user_id, report_id, created_at) VALUES (?, ?, ?)", u.ID, id, nowStr()); err != nil {
+			writeErr(w, http.StatusInternalServerError, "Could not save your vote")
+			return
+		}
+		var count int
+		_ = a.db.QueryRow("SELECT COUNT(*) FROM upvotes WHERE report_id = ?", id).Scan(&count)
+		writeJSON(w, http.StatusOK, map[string]any{"upvoted": true, "upvote_count": count})
+		return
+	}
+
 	// DELETE first: if a row was removed, the student had voted and we are un-voting.
 	// Otherwise insert. The PRIMARY KEY (user_id, report_id) makes double votes impossible.
 	res, err := a.db.Exec("DELETE FROM upvotes WHERE user_id = ? AND report_id = ?", u.ID, id)

@@ -33,6 +33,59 @@
           </div>
         </div>
 
+        <!-- Contextual fields for Food & Dining -->
+        <div id="context-food" class="context-box hidden">
+          <h4>🍲 Food & Dining Details</h4>
+          <div class="grid-2">
+            <div class="field" style="margin-bottom:0;">
+              <label for="food-meal">Meal Service</label>
+              <select id="food-meal">
+                <option value="Lunch">Lunch</option>
+                <option value="Dinner">Dinner</option>
+                <option value="Breakfast">Breakfast</option>
+                <option value="Snack / Tea">Snack / Tea</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label for="food-type">Primary Concern</label>
+              <select id="food-type">
+                <option value="Quality & Hygiene (Stale / Undercooked)">Quality & Hygiene (Stale / Undercooked)</option>
+                <option value="Foreign Object in Food">Foreign Object found</option>
+                <option value="Portion Size / Shortage">Portion Size / Shortage</option>
+                <option value="Dining Hall Cleanliness">Dining Hall Cleanliness</option>
+                <option value="Pricing / Token Overcharge">Pricing / Token Overcharge</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contextual fields for Wi-Fi & Internet -->
+        <div id="context-wifi" class="context-box hidden">
+          <h4>📶 Wi-Fi & Connectivity Details</h4>
+          <div class="grid-2">
+            <div class="field" style="margin-bottom:0;">
+              <label for="wifi-ssid">Network / SSID</label>
+              <select id="wifi-ssid">
+                <option value="SUST-STUDENT">SUST-STUDENT</option>
+                <option value="SUST-WIFI">SUST-WIFI</option>
+                <option value="Hall-WiFi">Hall Resident Wi-Fi</option>
+                <option value="Eduroam">Eduroam</option>
+                <option value="Department AP">Department Access Point</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label for="wifi-issue">Issue Type</label>
+              <select id="wifi-issue">
+                <option value="No Internet Connection">Connected, No Internet</option>
+                <option value="Unable to Connect / Auth Failed">Cannot Connect / Auth Loop</option>
+                <option value="Extremely Slow Speed">Extremely Slow Speed</option>
+                <option value="Weak / No Signal in Room">Weak Signal in Room/Floor</option>
+                <option value="Frequent Disconnections">Frequent Disconnections</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <div class="field">
           <label for="location">Exact location</label>
           <input type="text" id="location" required minlength="2" maxlength="120" placeholder="e.g. Lab 301, 3rd floor">
@@ -45,18 +98,44 @@
 
         <div class="field">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <label style="margin:0;">Photo <span class="hint" style="display:inline; font-weight:400;">(optional)</span></label>
+            <label style="margin:0;">Upload a Photo <span class="hint" style="display:inline; font-weight:600; color:var(--teal);">(Optional)</span></label>
             <button type="button" class="btn btn-ghost btn-sm hidden" id="remove-photo-btn" style="color:var(--coral-deep); font-size:0.8rem; padding:2px 8px;">✕ Remove photo</button>
           </div>
+          <div class="hint" style="margin-bottom:8px; color:var(--muted); font-size:0.84rem;">Adding a photo helps others understand the problem, but it is not required.</div>
           <div class="dropzone" id="dropzone">
             <input type="file" id="image" accept="image/png,image/jpeg,image/gif,image/webp">
             <img id="preview" class="hidden">
-            <div id="dz-text"><div class="cta">Click to choose a photo</div><div class="hint">JPG, PNG, GIF or WebP, up to 5 MB — no wifi or no camera? Skip it and add one later.</div></div>
+            <div id="dz-text"><div class="cta">Click to choose a photo</div><div class="hint">JPG, PNG, GIF or WebP up to 5 MB — no photo? Feel free to submit without one!</div></div>
           </div>
         </div>
 
         <button class="btn btn-primary btn-block" type="submit" id="submit-btn">Submit report</button>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicate Detection Modal -->
+<div id="duplicate-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dup-modal-title">
+  <div class="dup-modal-card">
+    <div class="dup-header">
+      <div class="dup-icon">⚠️</div>
+      <div>
+        <h3 id="dup-modal-title">Possible Existing Report Found</h3>
+        <p class="dup-subtitle">A similar issue was already reported for this location. Upvoting the existing report helps get it resolved faster!</p>
+      </div>
+    </div>
+
+    <div id="dup-card-slot"></div>
+    <div id="dup-feedback" style="margin-bottom: 12px;"></div>
+
+    <div class="dup-actions-row">
+      <button type="button" class="btn btn-upvote-existing" id="dup-vote-btn">
+        <span>👍</span> <span id="dup-vote-text">Vote on Existing Report (+1)</span>
+      </button>
+      <button type="button" class="btn btn-submit-new" id="dup-submit-new-btn">
+        <span>📝</span> <span>My Issue is Different (Submit as New)</span>
+      </button>
     </div>
   </div>
 </div>
@@ -75,6 +154,12 @@ let similarTimer = null;
   metaData.buildings.forEach(b => bSel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`));
   const cSel = document.getElementById('category');
   metaData.categories.forEach(c => cSel.insertAdjacentHTML('beforeend', `<option value="${c}">${categoryMeta(c).icon} ${c}</option>`));
+  
+  cSel.addEventListener('change', () => {
+    const val = cSel.value;
+    document.getElementById('context-food').classList.toggle('hidden', val !== 'Food & Dining');
+    document.getElementById('context-wifi').classList.toggle('hidden', val !== 'Wi-Fi & Internet');
+  });
 })();
 
 // ---- photo preview & remove ----
@@ -139,27 +224,139 @@ async function checkSimilar(){
   });
 });
 
-// ---- submit ----
+// ---- submit with duplicate detection & double-submission protection ----
+let isSubmitting = false;
+let bypassDuplicateCheck = false;
+
+const dupModal = document.getElementById('duplicate-modal');
+const dupCardSlot = document.getElementById('dup-card-slot');
+const dupFeedback = document.getElementById('dup-feedback');
+const dupVoteBtn = document.getElementById('dup-vote-btn');
+const dupVoteText = document.getElementById('dup-vote-text');
+const dupSubmitNewBtn = document.getElementById('dup-submit-new-btn');
+
+dupModal.addEventListener('click', (e) => {
+  if (e.target === dupModal) {
+    dupModal.classList.add('hidden');
+  }
+});
+
+function showDuplicatePrompt(dup) {
+  const cat = categoryMeta(dup.category);
+  dupCardSlot.innerHTML = `
+    <div class="dup-existing-card">
+      <div class="dup-meta-bar">
+        <span class="badge" style="background:${cat.pale}; color:${cat.color};">${cat.icon} ${escapeHtml(dup.category)}</span>
+        <span class="badge badge-${dup.status}">${escapeHtml(dup.status)}</span>
+        <span class="dup-votes-pill">🔥 ${dup.upvote_count} ${dup.upvote_count === 1 ? 'upvote' : 'upvotes'}</span>
+      </div>
+      <div class="dup-title">${escapeHtml(dup.title)}</div>
+      <div class="dup-location-line">📍 <strong>${escapeHtml(dup.building)}</strong> — ${escapeHtml(dup.location)}</div>
+      <p class="dup-desc-box">${escapeHtml(dup.description)}</p>
+    </div>
+  `;
+
+  if (dup.has_upvoted) {
+    dupFeedback.innerHTML = `<div class="dup-voted-notice">✓ You have already upvoted this existing report.</div>`;
+    dupVoteText.textContent = 'View Report in Feed';
+  } else {
+    dupFeedback.innerHTML = '';
+    dupVoteText.textContent = 'Vote on Existing Report (+1)';
+  }
+
+  // Action 1: Vote on Existing Report
+  dupVoteBtn.onclick = async () => {
+    if (dup.has_upvoted) {
+      window.location.href = 'feed.html?open=' + dup.id;
+      return;
+    }
+    dupVoteBtn.disabled = true;
+    dupVoteText.textContent = 'Recording vote…';
+    try {
+      await API.post(`/api/reports/${dup.id}/upvote?action=vote`);
+      dupFeedback.innerHTML = `<div class="alert alert-success" style="padding:8px 12px; margin-bottom:12px;">👍 Your vote was added to the existing report! Opening feed…</div>`;
+      setTimeout(() => {
+        window.location.href = 'feed.html?open=' + dup.id;
+      }, 800);
+    } catch (err) {
+      dupFeedback.innerHTML = `<div class="alert alert-error" style="padding:8px 12px; margin-bottom:12px;">${escapeHtml(err.message || 'Could not record vote')}</div>`;
+      dupVoteBtn.disabled = false;
+      dupVoteText.textContent = 'Vote on Existing Report (+1)';
+    }
+  };
+
+  // Action 2: Submit as New Report (Genuinely Different Issue)
+  dupSubmitNewBtn.onclick = () => {
+    dupModal.classList.add('hidden');
+    bypassDuplicateCheck = true;
+    document.getElementById('report-form').requestSubmit();
+  };
+
+  dupModal.classList.remove('hidden');
+}
+
 document.getElementById('report-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (isSubmitting) return; // Prevent duplicate rapid submission immediately
+
   const btn = document.getElementById('submit-btn');
   const alertSlot = document.getElementById('alert-slot');
   alertSlot.innerHTML = '';
-  const fd = new FormData();
-  fd.set('title', document.getElementById('title').value.trim());
-  fd.set('description', document.getElementById('description').value.trim());
-  fd.set('category', document.getElementById('category').value);
-  fd.set('building', document.getElementById('building').value);
-  fd.set('location', document.getElementById('location').value.trim());
-  if (fileInput.files[0]) fd.set('image', fileInput.files[0]); // photo is optional
 
-  btn.disabled = true; btn.textContent = 'Submitting…';
+  const cat = document.getElementById('category').value;
+  const buildingVal = document.getElementById('building').value;
+  const titleVal = document.getElementById('title').value.trim();
+  const locationVal = document.getElementById('location').value.trim();
+
+  // 1. Check for duplicates before submission unless user explicitly chose "Submit as New"
+  if (!bypassDuplicateCheck) {
+    try {
+      const qParams = new URLSearchParams({ title: titleVal, building: buildingVal, category: cat, location: locationVal });
+      const { reports } = await API.get('/api/reports/similar?' + qParams.toString());
+      if (reports && reports.length > 0) {
+        showDuplicatePrompt(reports[0]);
+        return; // Pause submission; let the student decide
+      }
+    } catch (err) {
+      /* non-critical fallback to submit if similar check fails */
+    }
+  }
+
+  // Reset bypass flag for subsequent submissions
+  bypassDuplicateCheck = false;
+
+  isSubmitting = true;
+  btn.disabled = true;
+  btn.textContent = 'Submitting report…';
+
   try {
+    let desc = document.getElementById('description').value.trim();
+
+    if (cat === 'Food & Dining') {
+      const meal = document.getElementById('food-meal').value;
+      const issue = document.getElementById('food-type').value;
+      desc += `\n\n[Meal Service: ${meal} | Primary Concern: ${issue}]`;
+    } else if (cat === 'Wi-Fi & Internet') {
+      const ssid = document.getElementById('wifi-ssid').value;
+      const issue = document.getElementById('wifi-issue').value;
+      desc += `\n\n[Wi-Fi Network: ${ssid} | Issue Type: ${issue}]`;
+    }
+
+    const fd = new FormData();
+    fd.set('title', titleVal);
+    fd.set('description', desc);
+    fd.set('category', cat);
+    fd.set('building', buildingVal);
+    fd.set('location', locationVal);
+    if (fileInput.files[0]) fd.set('image', fileInput.files[0]); // photo is strictly optional
+
     const { report } = await API.postForm('/api/reports', fd);
     window.location.href = 'dashboard.html?submitted=' + report.id;
   } catch (err) {
     alertSlot.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
-    btn.disabled = false; btn.textContent = 'Submit report';
+    btn.disabled = false;
+    btn.textContent = 'Submit report';
+    isSubmitting = false; // Re-enable for retry on failure
   }
 });
 </script>
